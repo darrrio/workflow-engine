@@ -7,15 +7,34 @@ namespace WorkflowEngine.Tests;
 
 public class WorkflowServiceTests
 {
+    private readonly Mock<IWorkflowRepository> _mockRepository;
     private readonly Mock<IWorkflowEventPublisher> _mockEventPublisher;
     private readonly Mock<ILogger<WorkflowService>> _mockLogger;
     private readonly WorkflowService _workflowService;
 
     public WorkflowServiceTests()
     {
+        _mockRepository = new Mock<IWorkflowRepository>();
         _mockEventPublisher = new Mock<IWorkflowEventPublisher>();
         _mockLogger = new Mock<ILogger<WorkflowService>>();
-        _workflowService = new WorkflowService(_mockEventPublisher.Object, _mockLogger.Object);
+        _workflowService = new WorkflowService(_mockRepository.Object, _mockEventPublisher.Object, _mockLogger.Object);
+        
+        // Setup repository mock to behave like a real in-memory store
+        var requests = new Dictionary<Guid, WorkflowRequest>();
+        
+        _mockRepository.Setup(r => r.SaveRequestAsync(It.IsAny<WorkflowRequest>()))
+            .Callback<WorkflowRequest>(req => requests[req.Id] = req)
+            .Returns(Task.CompletedTask);
+            
+        _mockRepository.Setup(r => r.GetRequestAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => requests.TryGetValue(id, out var req) ? req : null);
+            
+        _mockRepository.Setup(r => r.GetAllRequestsAsync())
+            .ReturnsAsync(() => requests.Values.ToList());
+            
+        _mockRepository.Setup(r => r.DeleteRequestAsync(It.IsAny<Guid>()))
+            .Callback<Guid>(id => requests.Remove(id))
+            .Returns(Task.CompletedTask);
     }
 
     [Fact]
