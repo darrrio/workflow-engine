@@ -70,3 +70,6 @@ _ReSharper*/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Workflow engine data files
+workflow-data/

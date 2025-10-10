@@ -1,6 +1,6 @@
 # Architecture Diagram
 
-## Workflow Engine with Kafka Integration
+## Workflow Engine with Persistence and Kafka Integration
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -21,28 +21,30 @@
                             ▼
             ┌───────────────────────────────┐
             │     WorkflowService           │
-            └───────────────┬───────────────┘
-                            │
-                            ▼
-            ┌───────────────────────────────┐
-            │  IWorkflowEventPublisher      │
-            │         (Interface)           │
-            └───────────────┬───────────────┘
-                            │
-                ┌───────────┴──────────┐
-                │                      │
-                ▼                      ▼
-    ┌─────────────────────┐  ┌──────────────────────────┐
-    │WorkflowEventPublisher│  │KafkaWorkflowEventPublisher│
-    │   (In-Memory)        │  │    (Kafka-based)         │
-    │                      │  │                          │
-    │  - Stores events     │  │  - Publishes to Kafka    │
-    │    in memory list    │  │  - Supports security     │
-    │  - For testing       │  │  - Configurable          │
-    └─────────────────────┘  └────────────┬──────────────┘
-                                           │
-                                           ▼
-                        ┌─────────────────────────────────┐
+            └───────┬───────────────┬───────┘
+                    │               │
+        ┌───────────┘               └──────────┐
+        │                                      │
+        ▼                                      ▼
+┌───────────────────┐          ┌───────────────────────────────┐
+│ IWorkflowRepository│          │  IWorkflowEventPublisher      │
+│   (Interface)     │          │         (Interface)           │
+└────────┬──────────┘          └───────────────┬───────────────┘
+         │                                     │
+    ┌────┴────┐                    ┌───────────┴──────────┐
+    │         │                    │                      │
+    ▼         ▼                    ▼                      ▼
+┌─────────┐ ┌──────────┐  ┌─────────────────────┐  ┌──────────────────────────┐
+│InMemory │ │FileBased │  │WorkflowEventPublisher│  │KafkaWorkflowEventPublisher│
+│Repository│ │Repository│  │   (In-Memory)        │  │    (Kafka-based)         │
+│         │ │          │  │                      │  │                          │
+│ - Stores│ │ - Saves  │  │  - Stores events     │  │  - Publishes to Kafka    │
+│   in    │ │   to JSON│  │    in memory list    │  │  - Supports security     │
+│   memory│ │   files  │  │  - For testing       │  │  - Configurable          │
+│ - Fast  │ │ - Durable│  └─────────────────────┘  └────────────┬──────────────┘
+│ - Default│ │ - Survives│                                      │
+│         │ │   restarts│                                      ▼
+└─────────┘ └─────┬────┘               ┌─────────────────────────────────┐
                         │    Kafka-Compatible Brokers     │
                         ├─────────────────────────────────┤
                         │  • Apache Kafka                 │
@@ -69,21 +71,23 @@
 │  or Environment Vars │
 └──────────┬───────────┘
            │
-           ▼
-    ┌──────────────┐
-    │ KafkaOptions │
-    │              │
-    │ Enabled?     │
-    └──────┬───────┘
-           │
-    ┌──────┴──────┐
-    │             │
-    ▼             ▼
-  true          false
-    │             │
-    ▼             ▼
-Kafka       In-Memory
-Publisher   Publisher
+           ├───────────────────┐
+           │                   │
+           ▼                   ▼
+    ┌──────────────┐    ┌─────────────────┐
+    │ KafkaOptions │    │PersistenceOptions│
+    │              │    │                 │
+    │ Enabled?     │    │ Enabled?        │
+    └──────┬───────┘    └────────┬────────┘
+           │                     │
+    ┌──────┴──────┐       ┌──────┴──────┐
+    │             │       │             │
+    ▼             ▼       ▼             ▼
+  true          false   true          false
+    │             │       │             │
+    ▼             ▼       ▼             ▼
+Kafka       In-Memory  FileBased   InMemory
+Publisher   Publisher  Repository  Repository
 ```
 
 ## Event Flow
@@ -97,7 +101,15 @@ User Request
     ▼
 WorkflowService.ApproveAsync()
     │
+    ├─ Get request from IWorkflowRepository
+    │
     ├─ Update workflow status
+    │
+    ├─ Save to IWorkflowRepository (persist changes)
+    │       │
+    │       └─ [If Persistence Enabled]
+    │              │
+    │              └─ Write JSON to file system
     │
     ├─ Create WorkflowApprovedEvent
     │
@@ -157,42 +169,64 @@ WorkflowService.ApproveAsync()
 
 ### Option 1: In-Memory (Default)
 ```
+Persistence:Enabled = false
 Kafka:Enabled = false
+→ Uses InMemoryWorkflowRepository
 → Uses WorkflowEventPublisher
-→ Events stored in memory
+→ All data stored in memory
 → Good for development/testing
+→ Data lost on restart
 ```
 
-### Option 2: Local Kafka/Redpanda
+### Option 2: File-Based Persistence
 ```
+Persistence:Enabled = true
+Persistence:StoragePath = workflow-data
+Kafka:Enabled = false
+→ Uses FileBasedWorkflowRepository
+→ Uses WorkflowEventPublisher
+→ Requests persisted to JSON files
+→ Survives restarts/crashes
+→ Good for production without external dependencies
+```
+
+### Option 3: Local Kafka/Redpanda
+```
+Persistence:Enabled = true
 Kafka:Enabled = true
 Kafka:BootstrapServers = localhost:9092
+→ Uses FileBasedWorkflowRepository
 → Uses KafkaWorkflowEventPublisher
-→ Events published to local broker
-→ Good for local development
+→ Requests persisted + Events published to local broker
+→ Good for local development with event streaming
 ```
 
-### Option 3: Production Kafka Cluster
+### Option 4: Production with Persistence and Kafka
 ```
+Persistence:Enabled = true
+Persistence:StoragePath = /var/workflow-data
 Kafka:Enabled = true
 Kafka:BootstrapServers = broker1:9093,broker2:9093,broker3:9093
 Kafka:SecurityProtocol = SaslSsl
 Kafka:SaslMechanism = ScramSha256
 Kafka:SaslUsername = <username>
 Kafka:SaslPassword = <password>
+→ Uses FileBasedWorkflowRepository
 → Uses KafkaWorkflowEventPublisher
-→ Events published to secured cluster
+→ Full durability and event streaming
 → Good for production
 ```
 
-### Option 4: Confluent Cloud
+### Option 5: Confluent Cloud
 ```
+Persistence:Enabled = true
 Kafka:Enabled = true
 Kafka:BootstrapServers = pkc-xxxxx.region.provider.confluent.cloud:9092
 Kafka:SecurityProtocol = SaslSsl
 Kafka:SaslMechanism = Plain
 Kafka:SaslUsername = <api-key>
 Kafka:SaslPassword = <api-secret>
+→ Uses FileBasedWorkflowRepository
 → Uses KafkaWorkflowEventPublisher
 → Events published to managed Kafka
 → Good for production (managed service)
