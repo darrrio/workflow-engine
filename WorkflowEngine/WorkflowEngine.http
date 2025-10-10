@@ -1,0 +1,44 @@
+@WorkflowEngine_HostAddress = http://localhost:5164
+
+### Create a workflow request
+POST {{WorkflowEngine_HostAddress}}/api/workflow/requests
+Content-Type: application/json
+
+{
+  "title": "Budget Approval Request",
+  "description": "Requesting approval for Q4 budget",
+  "enrichmentData": {
+    "amount": 50000,
+    "department": "IT"
+  }
+}
+
+### Get all workflow requests
+GET {{WorkflowEngine_HostAddress}}/api/workflow/requests
+Accept: application/json
+
+### Get a specific workflow request (replace with actual ID)
+GET {{WorkflowEngine_HostAddress}}/api/workflow/requests/YOUR_REQUEST_ID_HERE
+Accept: application/json
+
+### Approve a workflow request (replace with actual ID)
+POST {{WorkflowEngine_HostAddress}}/api/workflow/requests/YOUR_REQUEST_ID_HERE/approve
+Content-Type: application/json
+
+{
+  "approvedBy": "John Doe",
+  "comments": "Approved for processing",
+  "actionData": {
+    "priority": "high"
+  }
+}
+
+### Reject a workflow request (replace with actual ID)
+POST {{WorkflowEngine_HostAddress}}/api/workflow/requests/YOUR_REQUEST_ID_HERE/reject
+Content-Type: application/json
+
+{
+  "rejectedBy": "Jane Smith",
+  "reason": "Insufficient budget justification"
+}
+
