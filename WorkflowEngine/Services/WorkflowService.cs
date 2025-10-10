@@ -65,7 +65,8 @@ public class WorkflowService : IWorkflowService
         };
 
         await _eventPublisher.PublishAsync(approvalEvent);
-        _logger.LogInformation("Approved workflow request {RequestId} by {ApprovedBy}", requestId, approval.ApprovedBy);
+        var sanitizedApprovedBy = approval.ApprovedBy.Replace("\r", "").Replace("\n", "");
+        _logger.LogInformation("Approved workflow request {RequestId} by {ApprovedBy}", requestId, sanitizedApprovedBy);
 
         return request;
     }
@@ -97,7 +98,8 @@ public class WorkflowService : IWorkflowService
         };
 
         await _eventPublisher.PublishAsync(rejectionEvent);
-        _logger.LogInformation("Rejected workflow request {RequestId} by {RejectedBy}", requestId, rejection.RejectedBy);
+        var sanitizedRejectedBy = rejection.RejectedBy.Replace("\r", "").Replace("\n", "");
+        _logger.LogInformation("Rejected workflow request {RequestId} by {RejectedBy}", requestId, sanitizedRejectedBy);
 
         return request;
     }
