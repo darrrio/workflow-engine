@@ -1,3 +1,4 @@
+using WorkflowEngine.Configuration;
 using WorkflowEngine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,8 +7,20 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// Register workflow services
-builder.Services.AddSingleton<IWorkflowEventPublisher, WorkflowEventPublisher>();
+// Configure Kafka options
+builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection(KafkaOptions.SectionName));
+
+// Register workflow services - conditionally use Kafka or in-memory publisher
+var kafkaOptions = builder.Configuration.GetSection(KafkaOptions.SectionName).Get<KafkaOptions>();
+if (kafkaOptions?.Enabled == true)
+{
+    builder.Services.AddSingleton<IWorkflowEventPublisher, KafkaWorkflowEventPublisher>();
+}
+else
+{
+    builder.Services.AddSingleton<IWorkflowEventPublisher, WorkflowEventPublisher>();
+}
+
 builder.Services.AddSingleton<IWorkflowService, WorkflowService>();
 
 var app = builder.Build();
