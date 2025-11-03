@@ -147,153 +147,83 @@ public class BudgetService
 }
 ```
 
-#### Example: Python Service Integration
-
-```python
-import requests
-from typing import Dict, Any
-
-class WorkflowClient:
-    def __init__(self, workflow_engine_url: str):
-        self.workflow_engine_url = workflow_engine_url
-        self.base_url = f"{workflow_engine_url}/api/workflow/requests"
-    
-    def create_workflow_request(self, title: str, description: str, 
-                                enrichment_data: Dict[str, Any]) -> str:
-        """
-        Create a new workflow request.
-        
-        Returns:
-            str: The workflow request ID (GUID)
-        """
-        payload = {
-            "title": title,
-            "description": description,
-            "enrichmentData": enrichment_data
-        }
-        
-        response = requests.post(self.base_url, json=payload)
-        response.raise_for_status()
-        
-        result = response.json()
-        return result["id"]
-    
-    def get_workflow_status(self, request_id: str) -> Dict[str, Any]:
-        """
-        Get the current status of a workflow request.
-        
-        Returns:
-            dict: Workflow request details including status
-        """
-        response = requests.get(f"{self.base_url}/{request_id}")
-        response.raise_for_status()
-        return response.json()
-
-# Usage example
-workflow_client = WorkflowClient("http://localhost:5000")
-
-# Create a budget approval workflow
-request_id = workflow_client.create_workflow_request(
-    title="Q4 Budget Approval - Engineering",
-    description="Annual budget approval for Q4 2024",
-    enrichment_data={
-        "departmentId": "ENG-001",
-        "fiscalYear": 2024,
-        "requestedAmount": 500000.00,
-        "currency": "USD"
-    }
-)
-
-print(f"Workflow request created: {request_id}")
-```
-
-#### Example: Node.js Service Integration
-
-```javascript
-const axios = require('axios');
-
-class WorkflowClient {
-    constructor(workflowEngineUrl) {
-        this.baseUrl = `${workflowEngineUrl}/api/workflow/requests`;
-    }
-
-    async createWorkflowRequest(title, description, enrichmentData) {
-        const payload = {
-            title,
-            description,
-            enrichmentData
-        };
-
-        try {
-            const response = await axios.post(this.baseUrl, payload);
-            return response.data.id;
-        } catch (error) {
-            console.error('Failed to create workflow request:', error.message);
-            throw error;
-        }
-    }
-
-    async getWorkflowStatus(requestId) {
-        try {
-            const response = await axios.get(`${this.baseUrl}/${requestId}`);
-            return response.data;
-        } catch (error) {
-            console.error('Failed to get workflow status:', error.message);
-            throw error;
-        }
-    }
-}
-
-// Usage example
-const workflowClient = new WorkflowClient('http://localhost:5000');
-
-(async () => {
-    const requestId = await workflowClient.createWorkflowRequest(
-        'Q4 Budget Approval - Engineering',
-        'Annual budget approval for Q4 2024',
-        {
-            departmentId: 'ENG-001',
-            fiscalYear: 2024,
-            requestedAmount: 500000.00,
-            currency: 'USD'
-        }
-    );
-
-    console.log(`Workflow request created: ${requestId}`);
-})();
-```
-
 ### Step 4: Implement Approval/Rejection Actions
 
 Your approval service or admin interface should integrate with the workflow engine to approve or reject requests.
 
-#### Approval Example
+#### Approval Example (C#)
 
-```bash
-curl -X POST http://localhost:5000/api/workflow/requests/{requestId}/approve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "approvedBy": "jane.smith@company.com",
-    "comments": "Budget approved with conditions - quarterly review required",
-    "actionData": {
-      "approvalLevel": "executive",
-      "conditions": ["quarterly-review", "cost-monitoring"],
-      "approvedAmount": 500000.00,
-      "approvalDate": "2024-01-15",
-      "nextReviewDate": "2024-04-01"
+```csharp
+public class ApprovalService
+{
+    private readonly HttpClient _httpClient;
+    private readonly string _workflowEngineUrl;
+
+    public ApprovalService(HttpClient httpClient, IConfiguration configuration)
+    {
+        _httpClient = httpClient;
+        _workflowEngineUrl = configuration["WorkflowEngine:Url"];
     }
-  }'
+
+    public async Task ApproveWorkflowAsync(Guid requestId, string approvedBy, string comments, Dictionary<string, object> actionData = null)
+    {
+        var approvalAction = new
+        {
+            approvedBy,
+            comments,
+            actionData = actionData ?? new Dictionary<string, object>()
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_workflowEngineUrl}/api/workflow/requests/{requestId}/approve",
+            approvalAction
+        );
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RejectWorkflowAsync(Guid requestId, string rejectedBy, string reason)
+    {
+        var rejectionAction = new
+        {
+            rejectedBy,
+            reason
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_workflowEngineUrl}/api/workflow/requests/{requestId}/reject",
+            rejectionAction
+        );
+
+        response.EnsureSuccessStatusCode();
+    }
+}
 ```
 
-#### Rejection Example
+#### Using the Approval Service
 
-```bash
-curl -X POST http://localhost:5000/api/workflow/requests/{requestId}/reject \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rejectedBy": "jane.smith@company.com",
-    "reason": "Insufficient justification for requested amount. Please revise and resubmit with detailed cost breakdown and ROI analysis."
-  }'
+```csharp
+// Approve a workflow
+await _approvalService.ApproveWorkflowAsync(
+    requestId: workflowId,
+    approvedBy: "jane.smith@company.com",
+    comments: "Budget approved with conditions - quarterly review required",
+    actionData: new Dictionary<string, object>
+    {
+        { "approvalLevel", "executive" },
+        { "conditions", new[] { "quarterly-review", "cost-monitoring" } },
+        { "approvedAmount", 500000.00 },
+        { "approvalDate", "2024-01-15" },
+        { "nextReviewDate", "2024-04-01" }
+    }
+);
+
+// Reject a workflow
+await _approvalService.RejectWorkflowAsync(
+    requestId: workflowId,
+    rejectedBy: "jane.smith@company.com",
+    reason: "Insufficient justification for requested amount. Please revise and resubmit with detailed cost breakdown and ROI analysis."
+);
 ```
 
 ### Step 5: Consume Events from Kafka
@@ -309,8 +239,9 @@ using System.Text.Json;
 public class WorkflowEventConsumer
 {
     private readonly IConsumer<string, string> _consumer;
+    private readonly ILogger<WorkflowEventConsumer> _logger;
 
-    public WorkflowEventConsumer(string bootstrapServers, string groupId)
+    public WorkflowEventConsumer(string bootstrapServers, string groupId, ILogger<WorkflowEventConsumer> logger)
     {
         var config = new ConsumerConfig
         {
@@ -322,6 +253,7 @@ public class WorkflowEventConsumer
 
         _consumer = new ConsumerBuilder<string, string>(config).Build();
         _consumer.Subscribe("workflow-events");
+        _logger = logger;
     }
 
     public async Task StartConsumingAsync(CancellationToken cancellationToken)
@@ -347,7 +279,7 @@ public class WorkflowEventConsumer
             }
             catch (ConsumeException ex)
             {
-                Console.WriteLine($"Error consuming message: {ex.Error.Reason}");
+                _logger.LogError(ex, "Error consuming message: {Reason}", ex.Error.Reason);
             }
         }
     }
@@ -365,9 +297,13 @@ public class WorkflowEventConsumer
         // Extract enrichment data to identify the service
         var enrichmentData = approvalEvent.Request.EnrichmentData;
         
-        // Process based on your service logic
-        Console.WriteLine($"Workflow {approvalEvent.RequestId} approved by {approvalEvent.ApprovalAction.ApprovedBy}");
+        _logger.LogInformation(
+            "Workflow {RequestId} approved by {ApprovedBy}",
+            approvalEvent.RequestId,
+            approvalEvent.ApprovalAction.ApprovedBy
+        );
         
+        // Process based on your service logic
         // Example: Update budget status in your database
         // await _budgetService.UpdateBudgetStatusAsync(
         //     enrichmentData["departmentId"], 
@@ -379,8 +315,13 @@ public class WorkflowEventConsumer
     {
         var rejectionEvent = JsonSerializer.Deserialize<WorkflowRejectedEvent>(messageJson);
         
-        Console.WriteLine($"Workflow {rejectionEvent.RequestId} rejected: {rejectionEvent.RejectionAction.Reason}");
+        _logger.LogInformation(
+            "Workflow {RequestId} rejected: {Reason}",
+            rejectionEvent.RequestId,
+            rejectionEvent.RejectionAction.Reason
+        );
         
+        // Process based on your service logic
         // Example: Notify the requester about rejection
         // await _notificationService.SendRejectionNotificationAsync(
         //     rejectionEvent.Request.EnrichmentData["requestedBy"],
@@ -576,9 +517,19 @@ public class ProformaInvoiceService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<ProformaInvoiceService> _logger;
+    private readonly string _workflowEngineUrl;
 
-    public async Task<Guid> SubmitProformaInvoiceForApprovalAsync(
-        ProformaInvoice invoice)
+    public ProformaInvoiceService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<ProformaInvoiceService> logger)
+    {
+        _httpClient = httpClient;
+        _workflowEngineUrl = configuration["WorkflowEngine:Url"];
+        _logger = logger;
+    }
+
+    public async Task<Guid> SubmitProformaInvoiceForApprovalAsync(ProformaInvoice invoice)
     {
         var workflowRequest = new
         {
@@ -605,7 +556,7 @@ public class ProformaInvoiceService
         };
 
         var response = await _httpClient.PostAsJsonAsync(
-            "http://workflow-engine/api/workflow/requests",
+            $"{_workflowEngineUrl}/api/workflow/requests",
             workflowRequest
         );
 
@@ -627,20 +578,21 @@ public class ProformaInvoiceService
 
 Sales manager approves the invoice:
 
-```bash
-curl -X POST http://localhost:5000/api/workflow/requests/a1b2c3d4-5678-90ab-cdef-1234567890ab/approve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "approvedBy": "sarah.manager@company.com",
-    "comments": "Pricing and terms approved. Customer has good credit history.",
-    "actionData": {
-      "approverRole": "sales-manager",
-      "approvalLevel": 1,
-      "creditCheckPassed": true,
-      "nextApprover": "finance-department",
-      "approvalTimestamp": "2024-01-15T14:30:00Z"
+```csharp
+// In your approval controller or service
+await _approvalService.ApproveWorkflowAsync(
+    requestId: invoiceWorkflowId,
+    approvedBy: "sarah.manager@company.com",
+    comments: "Pricing and terms approved. Customer has good credit history.",
+    actionData: new Dictionary<string, object>
+    {
+        { "approverRole", "sales-manager" },
+        { "approvalLevel", 1 },
+        { "creditCheckPassed", true },
+        { "nextApprover", "finance-department" },
+        { "approvalTimestamp", DateTime.UtcNow }
     }
-  }'
+);
 ```
 
 #### Consuming the Approval Event
@@ -700,13 +652,12 @@ private async Task HandleProformaInvoiceApprovalAsync(WorkflowApprovedEvent appr
 
 Finance department rejects the invoice due to payment terms:
 
-```bash
-curl -X POST http://localhost:5000/api/workflow/requests/a1b2c3d4-5678-90ab-cdef-1234567890ab/reject \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rejectedBy": "finance-dept@company.com",
-    "reason": "Payment terms do not align with company policy for new customers. New customers require 100% upfront payment for orders over $50,000. Please revise the payment terms and resubmit."
-  }'
+```csharp
+await _approvalService.RejectWorkflowAsync(
+    requestId: invoiceWorkflowId,
+    rejectedBy: "finance-dept@company.com",
+    reason: "Payment terms do not align with company policy for new customers. New customers require 100% upfront payment for orders over $50,000. Please revise the payment terms and resubmit."
+);
 ```
 
 #### Consuming the Rejection Event
@@ -837,277 +788,248 @@ Department managers submit quarterly budget requests that require approval from 
 }
 ```
 
-#### Creating the Workflow (Python)
+#### Creating the Workflow (C#)
 
-```python
-import requests
-from datetime import datetime, timedelta
-from typing import Dict, List
+```csharp
+public class BudgetApprovalService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<BudgetApprovalService> _logger;
 
-class BudgetApprovalService:
-    def __init__(self, workflow_engine_url: str):
-        self.workflow_engine_url = workflow_engine_url
-        self.base_url = f"{workflow_engine_url}/api/workflow/requests"
-    
-    def submit_budget_request(
-        self,
-        department_id: str,
-        department_name: str,
-        fiscal_year: int,
-        quarter: str,
-        cost_centers: List[Dict],
-        total_amount: float
-    ) -> str:
-        """
-        Submit a budget approval request to the workflow engine.
-        
-        Returns:
-            str: Workflow request ID
-        """
-        enrichment_data = {
-            "departmentId": department_id,
-            "departmentName": department_name,
-            "fiscalYear": fiscal_year,
-            "quarter": quarter,
-            "submissionDate": datetime.now().isoformat(),
-            "currency": "USD",
-            "totalRequestedAmount": total_amount,
-            "costCenters": cost_centers
-        }
-        
-        workflow_request = {
-            "title": f"{quarter} {fiscal_year} Budget - {department_name}",
-            "description": f"Quarterly budget request for {department_name} department",
-            "enrichmentData": enrichment_data
-        }
-        
-        response = requests.post(self.base_url, json=workflow_request)
-        response.raise_for_status()
-        
-        result = response.json()
-        workflow_id = result["id"]
-        
-        print(f"Budget request submitted. Workflow ID: {workflow_id}")
-        return workflow_id
-
-# Usage
-service = BudgetApprovalService("http://localhost:5000")
-
-cost_centers = [
+    public BudgetApprovalService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<BudgetApprovalService> logger)
     {
-        "code": "CC-ENG-100",
-        "name": "Software Development",
-        "category": "personnel",
-        "amount": 450000.00,
-        "justification": "Two new senior engineer hires"
-    },
-    {
-        "code": "CC-ENG-101",
-        "name": "Infrastructure",
-        "category": "operational",
-        "amount": 200000.00,
-        "justification": "Increased cloud usage"
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
     }
-]
 
-workflow_id = service.submit_budget_request(
-    department_id="ENG-001",
-    department_name="Engineering",
-    fiscal_year=2024,
-    quarter="Q4",
-    cost_centers=cost_centers,
-    total_amount=650000.00
-)
+    public async Task<Guid> SubmitBudgetRequestAsync(BudgetRequest budgetRequest)
+    {
+        var enrichmentData = new Dictionary<string, object>
+        {
+            { "departmentId", budgetRequest.DepartmentId },
+            { "departmentName", budgetRequest.DepartmentName },
+            { "departmentHead", budgetRequest.DepartmentHead },
+            { "fiscalYear", budgetRequest.FiscalYear },
+            { "quarter", budgetRequest.Quarter },
+            { "submissionDate", DateTime.UtcNow },
+            { "currency", "USD" },
+            { "totalRequestedAmount", budgetRequest.TotalAmount },
+            { "previousQuarterBudget", budgetRequest.PreviousQuarterBudget },
+            { "budgetCategory", budgetRequest.Category },
+            { "costCenters", budgetRequest.CostCenters },
+            { "strategicAlignment", budgetRequest.StrategicAlignment },
+            { "riskFactors", budgetRequest.RiskFactors }
+        };
+
+        var workflowRequest = new
+        {
+            title = $"{budgetRequest.Quarter} {budgetRequest.FiscalYear} Budget - {budgetRequest.DepartmentName}",
+            description = $"Quarterly budget request for {budgetRequest.DepartmentName} department",
+            enrichmentData
+        };
+
+        var workflowEngineUrl = _configuration["WorkflowEngine:Url"];
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{workflowEngineUrl}/api/workflow/requests",
+            workflowRequest
+        );
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<WorkflowRequestResponse>();
+
+        _logger.LogInformation(
+            "Budget request submitted for {Department} {Quarter} {Year}. Workflow ID: {WorkflowId}",
+            budgetRequest.DepartmentName,
+            budgetRequest.Quarter,
+            budgetRequest.FiscalYear,
+            result.Id
+        );
+
+        return result.Id;
+    }
+}
 ```
 
 #### Approval Scenario
 
 CFO approves the budget with modifications:
 
-```bash
-curl -X POST http://localhost:5000/api/workflow/requests/b2c3d4e5-6789-01bc-def0-234567890abc/approve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "approvedBy": "cfo@company.com",
-    "comments": "Budget approved with 10% reduction in infrastructure costs. Defer hardware purchases to Q1 2025.",
-    "actionData": {
-      "approverRole": "cfo",
-      "approvalLevel": "executive",
-      "approvedAmount": 675000.00,
-      "modifications": [
-        {
-          "costCenter": "CC-ENG-101",
-          "originalAmount": 200000.00,
-          "approvedAmount": 180000.00,
-          "notes": "Reduce cloud buffer, defer hardware"
-        }
-      ],
-      "conditions": [
-        "Monthly cost reviews required",
-        "Q1 2025 re-evaluation for infrastructure needs"
-      ],
-      "approvalDate": "2024-09-20",
-      "effectiveDate": "2024-10-01",
-      "expiryDate": "2024-12-31"
-    }
-  }'
-```
-
-#### Consuming the Approval Event (Node.js)
-
-```javascript
-const { Kafka } = require('kafkajs');
-
-class BudgetApprovalConsumer {
-    constructor(kafkaBrokers, groupId) {
-        this.kafka = new Kafka({
-            clientId: 'budget-approval-service',
-            brokers: kafkaBrokers
-        });
-        
-        this.consumer = this.kafka.consumer({ groupId });
-    }
-
-    async start() {
-        await this.consumer.connect();
-        await this.consumer.subscribe({ 
-            topic: 'workflow-events', 
-            fromBeginning: false 
-        });
-
-        await this.consumer.run({
-            eachMessage: async ({ topic, partition, message }) => {
-                const event = JSON.parse(message.value.toString());
-                
-                if (event.eventType === 'WorkflowApproved') {
-                    await this.handleBudgetApproval(event);
-                } else if (event.eventType === 'WorkflowRejected') {
-                    await this.handleBudgetRejection(event);
+```csharp
+await _approvalService.ApproveWorkflowAsync(
+    requestId: budgetWorkflowId,
+    approvedBy: "cfo@company.com",
+    comments: "Budget approved with 10% reduction in infrastructure costs. Defer hardware purchases to Q1 2025.",
+    actionData: new Dictionary<string, object>
+    {
+        { "approverRole", "cfo" },
+        { "approvalLevel", "executive" },
+        { "approvedAmount", 675000.00 },
+        { "modifications", new[]
+            {
+                new
+                {
+                    costCenter = "CC-ENG-101",
+                    originalAmount = 200000.00,
+                    approvedAmount = 180000.00,
+                    notes = "Reduce cloud buffer, defer hardware"
                 }
             }
-        });
+        },
+        { "conditions", new[] { "Monthly cost reviews required", "Q1 2025 re-evaluation for infrastructure needs" } },
+        { "approvalDate", DateTime.Parse("2024-09-20") },
+        { "effectiveDate", DateTime.Parse("2024-10-01") },
+        { "expiryDate", DateTime.Parse("2024-12-31") }
+    }
+);
+```
+
+#### Consuming the Approval Event
+
+```csharp
+public class BudgetApprovalConsumer
+{
+    private readonly ILogger<BudgetApprovalConsumer> _logger;
+    private readonly IBudgetRepository _budgetRepository;
+    private readonly INotificationService _notificationService;
+    private readonly ITaskService _taskService;
+
+    public BudgetApprovalConsumer(
+        ILogger<BudgetApprovalConsumer> logger,
+        IBudgetRepository budgetRepository,
+        INotificationService notificationService,
+        ITaskService taskService)
+    {
+        _logger = logger;
+        _budgetRepository = budgetRepository;
+        _notificationService = notificationService;
+        _taskService = taskService;
     }
 
-    async handleBudgetApproval(event) {
-        const { enrichmentData } = event.request;
-        
+    public async Task HandleBudgetApprovalAsync(WorkflowApprovedEvent approvalEvent)
+    {
+        var enrichmentData = approvalEvent.Request.EnrichmentData;
+
         // Check if this is a budget workflow
-        if (!enrichmentData.departmentId) return;
+        if (!enrichmentData.ContainsKey("departmentId"))
+            return;
 
-        const { approvalAction } = event;
-        const approvedAmount = approvalAction.actionData?.approvedAmount || 
-                              enrichmentData.totalRequestedAmount;
+        var departmentId = enrichmentData["departmentId"].ToString();
+        var approvedAmount = approvalEvent.ApprovalAction.ActionData?.ContainsKey("approvedAmount") == true
+            ? Convert.ToDouble(approvalEvent.ApprovalAction.ActionData["approvedAmount"])
+            : Convert.ToDouble(enrichmentData["totalRequestedAmount"]);
 
-        console.log(
-            `Budget approved for ${enrichmentData.departmentName}: ` +
-            `$${approvedAmount} (${enrichmentData.quarter} ${enrichmentData.fiscalYear})`
+        _logger.LogInformation(
+            "Budget approved for {DepartmentName}: ${Amount} ({Quarter} {FiscalYear})",
+            enrichmentData["departmentName"],
+            approvedAmount,
+            enrichmentData["quarter"],
+            enrichmentData["fiscalYear"]
         );
 
         // Update budget status in database
-        await this.updateBudgetStatus(
-            enrichmentData.departmentId,
-            enrichmentData.fiscalYear,
-            enrichmentData.quarter,
-            'approved',
+        await _budgetRepository.UpdateStatusAsync(
+            departmentId,
+            Convert.ToInt32(enrichmentData["fiscalYear"]),
+            enrichmentData["quarter"].ToString(),
+            BudgetStatus.Approved,
             approvedAmount
         );
 
         // Send notification to department head
-        await this.sendNotification({
-            to: enrichmentData.departmentHead,
-            subject: `Budget Approved: ${enrichmentData.quarter} ${enrichmentData.fiscalYear}`,
-            body: `Your budget request has been approved.\n\n` +
-                  `Approved Amount: $${approvedAmount}\n` +
-                  `Comments: ${approvalAction.comments}\n\n` +
-                  `Effective Date: ${approvalAction.actionData?.effectiveDate}`
-        });
+        var departmentHead = enrichmentData["departmentHead"].ToString();
+        await _notificationService.SendEmailAsync(
+            to: departmentHead,
+            subject: $"Budget Approved: {enrichmentData["quarter"]} {enrichmentData["fiscalYear"]}",
+            body: $"Your budget request has been approved.\n\n" +
+                  $"Approved Amount: ${approvedAmount:N2}\n" +
+                  $"Comments: {approvalEvent.ApprovalAction.Comments}\n\n" +
+                  $"Effective Date: {approvalEvent.ApprovalAction.ActionData?["effectiveDate"]}"
+        );
 
         // If there are modifications, create follow-up tasks
-        const modifications = approvalAction.actionData?.modifications || [];
-        if (modifications.length > 0) {
-            await this.createModificationTasks(
-                enrichmentData.departmentId,
-                modifications
-            );
+        if (approvalEvent.ApprovalAction.ActionData?.ContainsKey("modifications") == true)
+        {
+            await CreateModificationTasksAsync(departmentId, departmentHead, approvalEvent);
         }
 
         // If there are conditions, schedule reminders
-        const conditions = approvalAction.actionData?.conditions || [];
-        if (conditions.length > 0) {
-            await this.scheduleConditionReminders(
-                enrichmentData.departmentId,
-                conditions
-            );
+        if (approvalEvent.ApprovalAction.ActionData?.ContainsKey("conditions") == true)
+        {
+            await ScheduleConditionRemindersAsync(departmentId, departmentHead, approvalEvent);
         }
     }
 
-    async handleBudgetRejection(event) {
-        const { enrichmentData } = event.request;
-        
-        if (!enrichmentData.departmentId) return;
+    public async Task HandleBudgetRejectionAsync(WorkflowRejectedEvent rejectionEvent)
+    {
+        var enrichmentData = rejectionEvent.Request.EnrichmentData;
 
-        const { rejectionAction } = event;
+        if (!enrichmentData.ContainsKey("departmentId"))
+            return;
 
-        console.log(
-            `Budget rejected for ${enrichmentData.departmentName}: ${rejectionAction.reason}`
+        var departmentId = enrichmentData["departmentId"].ToString();
+
+        _logger.LogWarning(
+            "Budget rejected for {DepartmentName}: {Reason}",
+            enrichmentData["departmentName"],
+            rejectionEvent.RejectionAction.Reason
         );
 
         // Update budget status
-        await this.updateBudgetStatus(
-            enrichmentData.departmentId,
-            enrichmentData.fiscalYear,
-            enrichmentData.quarter,
-            'rejected',
+        await _budgetRepository.UpdateStatusAsync(
+            departmentId,
+            Convert.ToInt32(enrichmentData["fiscalYear"]),
+            enrichmentData["quarter"].ToString(),
+            BudgetStatus.Rejected,
             0
         );
 
         // Notify department head
-        await this.sendNotification({
-            to: enrichmentData.departmentHead,
-            subject: `Budget Request Requires Revision`,
-            body: `Your budget request requires revision.\n\n` +
-                  `Reason: ${rejectionAction.reason}\n\n` +
-                  `Please review and resubmit with the requested changes.`
-        });
+        var departmentHead = enrichmentData["departmentHead"].ToString();
+        await _notificationService.SendEmailAsync(
+            to: departmentHead,
+            subject: "Budget Request Requires Revision",
+            body: $"Your budget request requires revision.\n\n" +
+                  $"Reason: {rejectionEvent.RejectionAction.Reason}\n\n" +
+                  $"Please review and resubmit with the requested changes."
+        );
 
         // Create task to revise budget
-        await this.createTask({
-            assignedTo: enrichmentData.departmentHead,
-            title: `Revise ${enrichmentData.quarter} Budget Request`,
-            description: rejectionAction.reason,
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+        await _taskService.CreateTaskAsync(new TaskCreate
+        {
+            AssignedTo = departmentHead,
+            Title = $"Revise {enrichmentData["quarter"]} Budget Request",
+            Description = rejectionEvent.RejectionAction.Reason,
+            DueDate = DateTime.UtcNow.AddDays(7)
         });
     }
 
-    async updateBudgetStatus(departmentId, fiscalYear, quarter, status, amount) {
-        // Implementation: Update your database
-        console.log(`Updating budget status: ${departmentId} ${quarter} ${fiscalYear} -> ${status}`);
+    private async Task CreateModificationTasksAsync(
+        string departmentId,
+        string departmentHead,
+        WorkflowApprovedEvent approvalEvent)
+    {
+        var modifications = approvalEvent.ApprovalAction.ActionData["modifications"];
+        // Create tasks for each modification
+        _logger.LogInformation("Creating modification tasks for {DepartmentId}", departmentId);
+        // Implementation details...
     }
 
-    async sendNotification(notification) {
-        // Implementation: Send email or push notification
-        console.log(`Sending notification to ${notification.to}`);
-    }
-
-    async createTask(task) {
-        // Implementation: Create task in your task management system
-        console.log(`Creating task: ${task.title}`);
-    }
-
-    async createModificationTasks(departmentId, modifications) {
-        // Implementation: Create tasks for each modification
-        console.log(`Creating ${modifications.length} modification tasks`);
-    }
-
-    async scheduleConditionReminders(departmentId, conditions) {
-        // Implementation: Schedule reminders for conditions
-        console.log(`Scheduling reminders for ${conditions.length} conditions`);
+    private async Task ScheduleConditionRemindersAsync(
+        string departmentId,
+        string departmentHead,
+        WorkflowApprovedEvent approvalEvent)
+    {
+        var conditions = approvalEvent.ApprovalAction.ActionData["conditions"];
+        // Schedule reminders for conditions
+        _logger.LogInformation("Scheduling condition reminders for {DepartmentId}", departmentId);
+        // Implementation details...
     }
 }
-
-// Start the consumer
-const consumer = new BudgetApprovalConsumer(['localhost:9092'], 'budget-approval-group');
-consumer.start().catch(console.error);
 ```
 
 ## Consuming Approval/Rejection Messages
@@ -1143,9 +1065,7 @@ Choose an appropriate offset strategy:
 - **Earliest**: Process all messages from the beginning (useful for new consumers)
 - **Specific Offset**: Resume from a specific point (useful for reprocessing)
 
-#### Example Configuration (All Languages)
-
-##### C# (Confluent.Kafka)
+#### Example Configuration (C#)
 
 ```csharp
 var config = new ConsumerConfig
@@ -1158,39 +1078,6 @@ var config = new ConsumerConfig
     MaxPollIntervalMs = 300000,
     EnableAutoOffsetStore = false
 };
-```
-
-##### Python (kafka-python)
-
-```python
-from kafka import KafkaConsumer
-
-consumer = KafkaConsumer(
-    'workflow-events',
-    bootstrap_servers=['localhost:9092'],
-    group_id='my-service-consumer-group',
-    auto_offset_reset='earliest',
-    enable_auto_commit=False,  # Manual commit
-    session_timeout_ms=30000,
-    max_poll_interval_ms=300000,
-    value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-)
-```
-
-##### Node.js (kafkajs)
-
-```javascript
-const consumer = kafka.consumer({
-    groupId: 'my-service-consumer-group',
-    sessionTimeout: 30000,
-    heartbeatInterval: 3000,
-    maxPollIntervalMs: 300000
-});
-
-await consumer.subscribe({
-    topic: 'workflow-events',
-    fromBeginning: true
-});
 ```
 
 ### Filtering Events

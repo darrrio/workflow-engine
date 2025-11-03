@@ -11,6 +11,16 @@ A C# .NET Web service that implements an event-driven workflow engine.
 - **Kafka Integration**: Support for publishing events to Kafka-compatible message brokers (Kafka, Redpanda, Apache Pulsar, etc.)
 - **Persistent Storage**: File-based persistence for workflow requests that survives process restarts and crashes
 
+## Documentation
+
+- **[Integration Guide](INTEGRATION_GUIDE.md)** - Complete guide for integrating new services with the workflow engine, including:
+  - Step-by-step integration walkthrough with C# examples
+  - Real-world examples (Proforma Invoice, Budget Approval)
+  - Event consumption patterns and Kafka integration
+  - Best practices and error handling
+- **[Architecture](ARCHITECTURE.md)** - System architecture and design decisions
+- **[Kafka Examples](KAFKA_EXAMPLES.md)** - Configuration examples for different Kafka brokers
+
 ## Project Structure
 
 ```
